@@ -1,0 +1,215 @@
+CREATE DATABASE cinema;
+
+CREATE TABLE IF NOT EXISTS cinema(
+	id SERIAL,
+	name TEXT NOT NULL,
+	address TEXT NULL,
+
+	CONSTRAINT pk_cinema_id PRIMARY KEY(id)
+);
+
+COPY cinema
+FROM 'D:\Visual Studio 2010\sHAPOVALOV\4.0_cinema.csv'
+WITH(
+	FORMAT CSV,
+	HEADER TRUE,
+	DELIMITER ';',
+	ENCODING 'UTF-8'
+);
+
+CREATE TABLE IF NOT EXISTS movie(
+	id SERIAL,
+	name TEXT NOT NULL,
+	genre TEXT NOT NULL,
+	duration INT NOT NULL,
+	air_start_date DATE,
+	air_end_date DATE,
+
+	CONSTRAINT pk_movie_id PRIMARY KEY(id),
+	CONSTRAINT c_movie_duration CHECK(duration > 0),
+	CONSTRAINT c_movie_air_dates CHECK(air_end_date >= air_start_date)
+);
+
+COPY movie
+FROM 'D:\Visual Studio 2010\sHAPOVALOV\4.0_movie.csv'
+WITH(
+	FORMAT CSV,
+	HEADER TRUE,
+	DELIMITER ';',
+	ENCODING 'UTF-8'
+);
+
+
+CREATE TABLE IF NOT EXISTS ticket_sales(
+	id SERIAL,
+	cinema_id INT,
+	movie_id INT,
+	date DATE NOT NULL,
+	time TIME NOT NULL,
+	cinema_hall_number INT NOT NULL,
+	ticket_type TEXT NOT NULL,
+	amount_sold INT NOT NULL,
+	ticket_price DECIMAL(12,2) NOT NULL,
+
+	CONSTRAINT pk_ticket_sales_id PRIMARY KEY(id),
+	CONSTRAINT fk_ticket_cinema FOREIGN KEY(cinema_id)
+		REFERENCES cinema(id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT fk_ticket_movie FOREIGN KEY(movie_id)
+		REFERENCES movie(id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT c_cinema_hall_number CHECK(cinema_hall_number > 0),
+	CONSTRAINT c_ticket_type CHECK(ticket_type IN(
+		'утренний', 'дневной', 'вечерний', 'ночной'
+	)),
+	CONSTRAINT c_amount_sold CHECK(amount_sold >= 0),
+	CONSTRAINT c_ticket_price CHECK(ticket_price >=0)
+);
+
+COPY ticket_sales
+FROM 'D:\Visual Studio 2010\sHAPOVALOV\4.0_ticket_sales.csv'
+WITH(
+	FORMAT CSV,
+	HEADER TRUE,
+	DELIMITER ';',
+	ENCODING 'UTF-8'
+);
+
+-----------------------------------------------
+#1)Вывести все фильмы, относящиеся к жанру «ХХХ».
+
+SELECT *
+FROM movie
+WHERE genre = 'Экшн';
+
+-----------------------------------------------
+#2)Вывести список фильмов, которые сегодня показывают 
+в кинотеатре «XXX». В результате вывести название 
+фильма, время показа и зал. Результат упорядочить 
+по времени показа фильма.
+
+SELECT m.name as movie_name,
+	   t.time as ticket_time,
+	   t.cinema_hall_number as cinema_hall_number
+FROM ticket_sales as t, movie as m, cinema as c
+WHERE t.movie_id = m.id AND
+	  t.cinema_id = c.id AND
+	  t.date = CURRENT_DATE AND
+	  c.name = 'Звезда'
+ORDER BY ticket_time;
+
+-----------------------------------------------
+#3)Вывести названия фильмов, которые показывают 
+после 20:00.
+
+SELECT DISTINCT m.name as movie_name,
+	   t.time as ticket_time
+FROM ticket_sales as t, movie as m
+WHERE t.movie_id = m.id AND 
+	  t.time > '20:00';
+
+-----------------------------------------------
+#4)Составить рейтинг самых популярных фильмов 
+за все время (топ 5). В результате вывести: 
+название фильма и количество проданных билетов.
+
+SELECT m.name as movie_name,
+	   SUM(amount_sold) as total_sold
+FROM ticket_sales as t, movie as m
+WHERE t.movie_id = m.id;
+GROUP BY m.name
+GROUP BY total_sold DESC
+LIMIT 5;
+
+-----------------------------------------------
+#5)Вывести фильмы, которые показываются меньше 
+месяца(30 дней). В результате вывести: название 
+фильма, жанр, количество дней проката. 
+Упорядочить результат по жанрам, а после 
+по количеству дней проката в обратном порядке.
+
+SELECT m.name as movie_name,
+	   m.genre as movie_genre,
+	   air_end_date - air_start_date as days_left
+FROM movie as m
+WHERE air_end_date - air_start_date < 30
+ORDER BY movie_genre, days_left DESC;
+
+-----------------------------------------------
+#6)Вывести кинотеатры, которые за этот месяц 
+показали меньше 8 фильмов. В результате вывести: 
+название кинотеатра и количество показов.
+
+SELECT c.name as cinema_name,
+	   COUNT(*) as total
+FROM ticket_sales as t, cinema as c
+WHERE t.cinema_id = c.id
+GROUP BY c.name
+HAVING COUNT(*) < 8;
+
+-----------------------------------------------
+#7)Вывести фильмы, прокат которых заканчивается 
+меньше, чем через 260 дней. В результате вывести: 
+название фильма, дату окончания проката, количество 
+дней до конца проката. Упорядочить результат 
+по количеству дней до конца проката по возрастанию.
+
+SELECT DISTINCT m.name as movie_name,
+	   air_end_date as movie_air_end_date,
+	   air_end_date - CURRENT_DATE as days_left
+FROM ticket_sales as t, cinema as c
+WHERE t.movie_id = m.id AND
+	  m.air_start_date as CURRENT_DATE AND
+	  m.air_end_date > CURRENT_DATE AND
+	  air_end_date - CURRENT_DATE < 260
+ORDER BY days_left;
+
+-----------------------------------------------
+#8)Вывести рейтинг самых популярных кинотеатров 
+по проданным билетам за месяц (топ 3). 
+В результате вывести название кинотеатра, 
+количество проданных билетов и общую выручку за месяц.
+
+SET lc_monetary = 'ru_RU.UTF-8';
+
+SELECT c.name as cinema_name,
+	   SUM(amount_sold) as total_sold,
+	   to_char(SUM(t.amount_sold * t.ticket_price), '9999999999.99 L') as total
+FROM cinema as c, ticket_sales as t
+WHERE t.cinema_id = c.id AND
+	  to_char(date, 'FMMonth') = to_char(CURRENT_DATE, 'FMMonth')
+GROUP BY c.name
+ORDER BY total_sold DESC
+LIMIT 3;
+
+-----------------------------------------------
+#9)Посчитать количество проданных билетов за 
+выходные дни этого месяца. В результате вывести 
+название кинотеатра, день недели, количество 
+проданных билетов. Результат упорядочить по 
+названиям дней недели, а затем по количеству 
+проданных билетов.
+
+SELECT c.name as cinema_name,
+	   to_char(date, 'FMDay') as day_of_week,
+	   SUM(amount_sold) as total_sold
+FROM ticket_sales as t, cinema as c
+WHERE t.cinema_id = c.id AND
+	  to_char(date, 'FMMonth') = to_char(CURRENT_DATE, 'FMMonth') AND
+	  to_char(date, 'FMDay') IN ('Sunday', 'Saturday')
+GROUP BY c.name, to_char(date, 'FMDay')
+ORDER BY day_of_week, total_sold;
+
+-----------------------------------------------
+#10)Посчитать распределенность продажи билетов 
+по дням недели. В результате вывести день недели, 
+количество проданных билетов и процент от общего 
+количества проданных билетов. Упорядочить 
+по убыванию процента.
+
+SELECT to_char(date, 'FMDay') as day_of_week
+	   SUM(amount_sold) as total_sold,
+	   ROUND(100.00 * SUM(amount_sold) / (SELECT SUM(amount_sold) FROM ticket_sales),2) as percent
+FROM ticket_sales as t
+GROUP BY to_char(date, 'FMDay')
+ORDER BY "percent" DESC;
