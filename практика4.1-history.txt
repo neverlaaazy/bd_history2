@@ -1,0 +1,314 @@
+CREATE DATABASE institute;
+
+CREATE TABLE IF NOT EXISTS speciality(
+	id SERIAL,
+	number INT NOT NULL,
+	name TEXT NOT NULL,
+	level TEXT NOT NULL,
+	type TEXT NOT NULL,
+	cost INT NOT NULL,
+
+	CONSTRAINT pk_speciality_id PRIMARY KEY(id),
+	CONSTRAINT c_speciality_number CHECK(number > 0),
+	CONSTRAINT c_speciality_level CHECK(level IN ('бакалавриат', 'магистратура', 'специалитет')),
+	CONSTRAINT c_speciality_type CHECK(type IN ('бюджет', 'контракт')),
+	CONSTRAINT c_speciality_cost CHECK(cost > 0)
+	
+);
+
+CREATE TABLE IF NOT EXISTS student(
+	id SERIAL,
+	lastname TEXT NOT NULL,
+	firstname TEXT NOT NULL,
+	surname TEXT NOT NULL,
+	birthday DATE NOT NULL,
+	gender VARCHAR(7) NOT NULL,
+	speciality_id INT,
+
+	CONSTRAINT pk_student_id PRIMARY KEY(id),
+	CONSTRAINT fk_student_speciality FOREIGN KEY(speciality_id)
+		REFERENCES speciality(id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT c_student_gender CHECK(gender = 'Мужской' OR 
+		gender = 'Женский')
+);
+
+CREATE TABLE IF NOT EXISTS payment(
+	id SERIAL,
+	student_id INT NOT NULL,
+	payment_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	amount DECIMAL(12,2) NOT NULL,
+	debt DECIMAL(12,2) NOT NULL,
+
+	CONSTRAINT pk_payment_id PRIMARY KEY(id),
+	CONSTRAINT fk_payment_student FOREIGN KEY(student_id)
+		REFERENCES student(id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT c_payment_amount CHECK (amount >= 0),
+	CONSTRAINT c_payment_debt CHECK (debt >= 0)
+);
+
+DROP TABLE IF EXISTS speciality CASCADE;
+DROP TABLE IF EXISTS student CASCADE;
+DROP TABLE IF EXISTS payment CASCADE;
+
+INSERT INTO speciality (number, name, level, type, cost) VALUES
+(1, 'Прикладная информатика', 'бакалавриат', 'бюджет', 120000),
+(2, 'Прикладная информатика', 'бакалавриат', 'контракт', 125000),
+(3, 'Экономика', 'бакалавриат', 'контракт', 140000),
+(4, 'Юриспруденция', 'бакалавриат', 'бюджет', 150000),
+(5, 'Прикладная математика', 'магистратура', 'бюджет', 130000),
+(6, 'Менеджмент', 'магистратура', 'контракт', 160000),
+(7, 'Бизнес-информатика', 'специалитет', 'бюджет', 180000),
+(8, 'Бизнес-информатика', 'специалитет', 'контракт', 250000),
+(9, 'Лингвистика', 'бакалавриат', 'бюджет', 110000),
+(10, 'Дизайн', 'бакалавриат', 'контракт', 200000);
+
+INSERT INTO student (lastname, firstname, surname, birthday, gender, speciality_id) VALUES
+('Шаповалов', 'Сергей', 'Александрович', '2005-05-15', 'Мужской', 1),
+('Капустин', 'Никита', 'Сергеевич', '2006-09-21', 'Женский', 2),
+('Екат', 'Алексей', 'Петрович', '2007-02-10', 'Мужской', 3),
+('Кузнецова', 'Мария', 'Дмитриевна', '2005-11-30', 'Женский', 4),
+('Смирнов', 'Игорь', 'Олегович', '2004-07-04', 'Мужской', 5),
+('Васильева', 'Елена', 'Викторовна', '2007-12-12', 'Женский', 6),
+('Ееееее', 'Дмитрий', 'Александрович', '2006-03-25', 'Мужской', 7),
+('Павлова', 'Ольга', 'Игоревна', '2007-06-18', 'Женский', 8),
+('Соколов', 'Артем', 'Владимирович', '2005-01-05', 'Мужской', 9),
+('Козлова', 'Дарья', 'Николаевна', '2004-08-22', 'Женский', 10),
+('Волков', 'Максим', 'Андреевич', '2003-10-10', 'Мужской', 1),
+('Козлова', 'Марина', 'Викторовна', '2007-12-12', 'Женский', 6),
+('Лапухин', 'Глеб', 'Александрович', '2006-03-25', 'Мужской', 7),
+('Андреева', 'Ольга', 'Игоревна', '2007-06-18', 'Женский', 8),
+('Иванов', 'Иван', 'Иванович', '2005-01-05', 'Мужской', 9),
+('Ефремова', 'Ольга', 'Николаевна', '2004-08-22', 'Женский', 10),
+('Сальников', 'Игорь', 'Андреевич', '2003-10-10', 'Мужской', 1);
+
+INSERT INTO payment (student_id, payment_date, amount, debt) VALUES
+(1, '2025-09-01 10:00:00', 62500, 62500),
+(2, '2025-09-02 11:30:00', 140000, 0),
+(3, '2025-09-03 09:15:00', 80000, 80000),
+(4, '2025-09-04 14:20:00', 125000, 125000),
+(5, '2025-09-05 16:45:00', 100000, 100000),
+(6, '2025-02-01 10:00:00', 62500, 0),
+(7, '2025-02-05 12:00:00', 80000, 0),
+(8, '2025-02-10 09:00:00', 125000, 0),
+(9, '2025-02-15 11:00:00', 100000, 0),
+(10, '2025-09-01 10:00:00', 140000, 0),
+(11, '2025-02-05 12:00:00', 80000, 0),
+(12, '2025-09-04 14:20:00', 140000, 0),
+(13, '2025-09-01 12:00:00', 80000, 80000),
+(14, '2025-09-04 14:20:00', 125000, 0),
+(15, '2025-09-01 12:00:00', 100000, 0),
+(16, '2025-09-04 14:20:00', 100000, 100000),
+(17, '2025-09-01 12:00:00', 125000, 125000);
+
+=====================Задания=======================
+
+---------------------------------------------------
+1)Вывести список студентов чей возраст больше 20.
+SELECT *
+FROM student
+WHERE EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthday) > 20;
+
+---------------------------------------------------
+2)Вывести список студентов чей возраст больше 18 и меньше 22.
+SELECT * 
+FROM student 
+WHERE EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthday) BETWEEN 19 AND 21;
+
+---------------------------------------------------
+3)Вывести список бюджетных специальностей.
+SELECT *
+FROM speciality AS s
+WHERE s.type = 'бюджет';
+
+---------------------------------------------------
+4)Вывести номер и наименование всех специальностей, 
+отсортированное в алфавитном порядке по наименованию 
+специальности.
+SELECT s.number AS speciality_number,
+	   s.name AS speciality_name
+FROM speciality AS s
+ORDER BY s.name;
+
+---------------------------------------------------
+5)Вывести список студентов, у которых фамилия 
+начинается на букву «Е».
+SELECT *
+FROM student AS s
+WHERE s.lastname LIKE 'Е%';
+
+---------------------------------------------------
+6)Вывести список студентов чей возраст находится 
+в диапазоне от 20 до 25 лет, которые учатся на 
+специальности «Прикладная информатика».
+SELECT *
+FROM student AS s
+WHERE EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM s.birthday) BETWEEN 21 AND 24 AND
+	  s.speciality_id = 1 OR s.speciality_id = 2;
+
+---------------------------------------------------
+7)Вывести среднюю стоимость обучения по всем 
+специальностям, на которых студенты обучаются 
+по контракту.
+SELECT AVG(sp.cost) as speciality_avg_cost
+FROM speciality AS sp
+WHERE sp.type = 'контракт';
+
+---------------------------------------------------
+8)Вывести список студентов и их специальностей. 
+Результат отсортировать сначала по названию специальности, 
+а потом по ФИО студента в алфавитном порядке.
+SELECT st.lastname,
+	   st.firstname,
+	   st.surname,
+	   sp.name AS speciality_name
+FROM student AS st, speciality AS sp
+WHERE st.speciality_id = sp.id
+ORDER BY sp.name, st.lastname, st.firstname, st.surname;
+
+---------------------------------------------------
+9)Вывести максимальную и минимальную сумму оплаты обучения, 
+внесенную студентами. В результате вывести ФИО плательщика, 
+его специальность, тип и внесенную сумму.
+SELECT	st.lastname,
+		st.firstname,
+		st.surname,
+		sp.name,
+		sp.type,
+		p.amount
+FROM student AS st, speciality AS sp, payment AS p
+WHERE st.speciality_id = sp.id AND
+	  p.student_id = st.id AND
+	  p.amount IN (
+	  	(SELECT MAX(amount) FROM payment),
+		(SELECT MIN(amount) FROM payment)
+	  );
+
+---------------------------------------------------
+10)Вывести общее количестов студентов.
+SELECT COUNT(*) AS total_students
+FROM student AS s;
+
+---------------------------------------------------
+11)Вывести все уровни обучения и количество 
+студентов на этих уровнях обучения.
+SELECT	sp.level AS speciality_level,
+		COUNT(st.id) AS student_count
+FROM speciality AS sp, student AS st
+WHERE sp.id = st.speciality_id
+GROUP BY sp.level;
+
+---------------------------------------------------
+12)Вывести ФИО и название специальности студента, 
+который первым оплатил обучение.
+SELECT st.lastname AS student_lastname,
+	   st.firstname AS student_firstname,
+	   st.surname AS student_surname
+FROM student AS st, speciality AS sp, payment AS p
+WHERE st.speciality_id = sp.id AND
+	  p.student_id = st.id
+ORDER BY p.payment_date
+LIMIT 1;
+
+---------------------------------------------------
+13)Посчитать количество студентов и 
+общую задолженность по оплате обучения и 
+результат переименовать: количество студентов в 
+«Общее количество студентов», а задолженность в «Общий долг».
+SELECT 
+    COUNT(DISTINCT p.student_id) AS "Общее количество студентов",
+    SUM(p.debt) AS "Общий долг"
+FROM payment AS p;
+
+---------------------------------------------------
+14)Посчитать количество платежей и общую сумму, 
+которую внес студент «Иванов Иван Иванович».
+SELECT 
+    COUNT(p.id) AS payment_count,
+    SUM(p.amount) AS "sum"
+FROM student AS st, payment AS p
+WHERE st.id = p.student_id
+  AND st.lastname = 'Иванов'
+  AND st.firstname = 'Иван'
+  AND st.surname = 'Иванович';
+
+---------------------------------------------------
+*15)Вывести список студентов: полное имя, 
+общая сумма за оплату обучения, общая сумма долга. 
+Учитывать только тех студентов, которые учатся на специальности 
+«Бизнес-информатика», у которых общая сумма долга равна 0, 
+а общая сумма за оплату обучения за текущий год равна 
+стоимости учебы на указанной специальности.
+SELECT 
+    st.lastname AS student_lastname, 
+	st.firstname AS student_firstname, 
+	st.surname AS student_surname, 
+    SUM(p.amount) AS payment_amount_sum, 
+    SUM(p.debt) AS payment_debt_sum
+FROM student AS st, speciality AS sp, payment AS p
+WHERE st.speciality_id = sp.id 
+  AND st.id = p.student_id
+  AND sp.name = 'Бизнес-информатика'
+  AND EXTRACT(YEAR FROM p.payment_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+GROUP BY st.id, st.lastname, st.firstname, st.surname, sp.cost
+HAVING SUM(p.debt) = 0 
+   AND SUM(p.amount) = sp.cost;
+
+---------------------------------------------------
+16)Вывести все специальности и количество 
+студентов этих специальностей, отсортировать результат 
+по убыванию количества студентов.
+SELECT sp.name AS speciality_name, 
+	   COUNT(st.id) AS student_count
+FROM speciality AS sp, student AS st
+WHERE sp.id = st.speciality_id
+GROUP BY sp.name
+ORDER BY student_count DESC;
+
+---------------------------------------------------
+*17)Вывести все специальности, количество студентов 
+в которых превышает 4 человека.
+SELECT sp.name AS speciality_name, 
+	   COUNT(st.id) AS student_count
+FROM speciality AS sp, student AS st
+WHERE sp.id = st.speciality_id
+GROUP BY sp.name
+HAVING COUNT(st.id) > 4;
+
+---------------------------------------------------
+18)Вывести ФИО студентов, общая сумма долга которых 
+ниже средней суммы долга по всем студентам.
+SELECT st.lastname, 
+	   st.firstname, 
+	   st.surname
+FROM student AS st, payment AS p
+WHERE st.id = p.student_id
+GROUP BY st.id, st.lastname, st.firstname, st.surname
+HAVING SUM(p.debt) < (SELECT AVG(debt) FROM payment);
+
+---------------------------------------------------
+19)Вывести количество платежей и общую сумму платежей 
+за обучение за текущий год (2025г.), сгруппированную по названиям месяцев.
+SELECT 
+    TO_CHAR(payment_date, 'Month') AS payment_month,
+    COUNT(id) AS count_pay,
+    SUM(amount) AS "sum"
+FROM payment
+WHERE EXTRACT(YEAR FROM payment_date) = 2025
+GROUP BY TO_CHAR(payment_date, 'Month'), EXTRACT(MONTH FROM payment_date)
+ORDER BY EXTRACT(MONTH FROM payment_date);
+
+---------------------------------------------------
+20)Вывести название специальности, количество студентов 
+этой специальности и процент распределения студентов 
+по специальностям, упорядочить по убыванию процента.
+SELECT sp.name AS speciality_name, 
+       COUNT(st.id) AS student_count,
+       ROUND(COUNT(st.id) * 100.0 / (SELECT COUNT(*) FROM student), 2) AS percentage
+FROM speciality AS sp, student AS st
+WHERE sp.id = st.speciality_id
+GROUP BY sp.name
+ORDER BY percentage DESC;
+
+---------------------------------------------------
