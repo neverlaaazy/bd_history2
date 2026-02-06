@@ -29,12 +29,20 @@ BEGIN
 
 	FOR i IN 1..duration_months LOOP
 		calc_date := start_date + (i * INTERVAL '1 month');
-		accrued := current_balance + accrued;
-
+		accrued := current_balance * monthly_rate;
+		current_balance := current_balance + accrued;
 		INSERT INTO deposit_yield (date, accured_interest, amount, description)
-		VALUES (start_date, 0, start_amount,'Проценты по вкладу');
+		VALUES (calc_date, accrued, current_balance,'Проценты по вкладу');
 	END LOOP;
 
 	RAISE INFO '% ₽ было положено под % %% годовых на срок % месяцев',start_amount, interest, duration_months;
 END
-$$
+$$;
+
+SELECT	id AS "№", 
+    	date AS "Дата", 
+    	round(accured_interest, 2) AS "Начислено процентов", 
+    	round(amount, 2) AS "Сумма", 
+    	description AS "Описание"
+FROM deposit_yield
+ORDER BY id;
