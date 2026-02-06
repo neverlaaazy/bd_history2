@@ -1,0 +1,116 @@
+CREATE DATABASE  test;
+
+--------------------------------------------
+Локальные переменные:
+
+*
+Синтаксис объявления переменных:
+name [ CONSTANT ] type [ NOT NULL ] [ { DEFAULT | := | = } expression ]; 
+*
+
+DO $$
+DECLARE
+	user_name TEXT NOT NULL := 'Иванов Иван';
+	age INT := 28;
+	registration_date CONSTANT TIMESTAMP NOT NULL := now();
+BEGIN
+	RAISE INFO 'Пользователь: %, возраст - %, дата регистрации - %', user_name, age, registration_date;
+END
+$$
+
+*
+Вывод в консоль
+RAISE INFO 'Пользователь: %, возраст - %, дата регистрации - %', user_name, age, registration_date;
+*
+
+--------------------------------------------
+Условный оператор:
+
+DO $$
+DECLARE
+	num INT := 54;
+BEGIN
+	IF num < 0 THEN
+		RAISE INFO 'Число % отрицательное', num;
+	ELSIF num = 0 THEN
+		RAISE INFO 'Число % равно нулю', num;
+	ELSIF num > 0 THEN
+		RAISE INFO 'Число % положительное', num;
+	ELSE
+		RAISE INFO 'Число не определено';
+	END IF;
+END
+$$
+
+*
+ИНФОРМАЦИЯ:  Число 54 положительное
+*
+
+--------------------------------------------
+Оператор CASE:
+
+SELECT title,
+	   price,
+	   CASE
+	   	   WHEN price < 1500 THEN 'Низкий ценовой диапозон'
+		   WHEN price BETWEEN 1500 AND 3500 THEN 'Средний ценовой диапозон'
+		   ELSE 'Высокий ценовой диапозон'
+	   END AS "Ценовой диапозон"
+FROM game
+
+*
+Возвращается таблица с названием, ценой и 
+данными из CASE оператора
+*
+
+--------------------------------------------
+Циклы
+
+DO $$
+DECLARE
+	num INT :=0;
+BEGIN
+	LOOP
+		RAISE INFO 'num = %',num;
+		num = num + 1;
+		
+		EXIT WHEN num = 15;
+		-- IF num = 21 THEN
+		-- 	EXIT;
+		-- END IF;
+	END LOOP;
+END
+$$
+
+DO $$
+DECLARE
+	num INT :=0;
+BEGIN
+	WHILE num < 15 LOOP
+		num = num + 1;
+		RAISE INFO 'num = %',num;
+	END LOOP;
+END
+$$
+
+DO $$
+BEGIN
+	FOR i IN REVERSE 10..1 BY 2 LOOP
+		RAISE INFO 'i = %',i;
+	END LOOP;
+END;
+$$
+
+DO $$
+DECLARE
+	row_record record;
+	max_title_length INT;
+BEGIN
+	SELECT max(length(title)) INTO max_title_info FROM game;
+	RAISE INFO 'max length = %',max_title_info;
+	
+	FOR row_record IN SELECT title, price FROM game LOOP
+		RAISE INFO '% %| %',row_record.title, REPEAT(' ',max_title_length - length(row_record.title)), row_record.price;
+	END LOOP;
+END;
+$$
