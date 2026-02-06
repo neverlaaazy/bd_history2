@@ -1,0 +1,40 @@
+CREATE DATABASE practice5;
+
+DROP TABLE IF EXISTS deposit_yield;
+
+DO $$
+DECLARE
+	start_amount DECIMAL := 250000;
+	interest DECIMAL := 12;
+	duration_months INT := 12;
+	start_date DATE := '2025-01-01';
+
+	current_balance DECIMAL := start_amount;
+	monthly_rate DECIMAL := (interest / 100) / 12;
+	calc_date DATE := start_date;
+	accrued DECIMAL;
+BEGIN
+	CREATE TEMP TABLE deposit_yield(
+	id SERIAL,
+	date DATE,
+	accured_interest DECIMAL,
+	amount DECIMAL,
+	description TEXT,
+
+	CONSTRAINT pk_deposit_yield PRIMARY KEY(id)
+	);
+
+	INSERT INTO deposit_yield (date, accured_interest, amount, description)
+	VALUES (start_date, 0, start_amount,'Изначальный депозит');
+
+	FOR i IN 1..duration_months LOOP
+		calc_date := start_date + (i * INTERVAL '1 month');
+		accrued := current_balance + accrued;
+
+		INSERT INTO deposit_yield (date, accured_interest, amount, description)
+		VALUES (start_date, 0, start_amount,'Проценты по вкладу');
+	END LOOP;
+
+	RAISE INFO '% ₽ было положено под % %% годовых на срок % месяцев',start_amount, interest, duration_months;
+END
+$$
