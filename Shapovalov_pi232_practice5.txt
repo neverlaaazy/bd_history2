@@ -1,48 +1,60 @@
 CREATE DATABASE practice5;
 
 DROP TABLE IF EXISTS deposit_yield;
+DROP TABLE IF EXISTS deposit_settings;
+CREATE TEMP TABLE deposit_settings (currency_sign TEXT, start_sum DECIMAL);
 
 DO $$
 DECLARE
 	start_amount DECIMAL := 250000;
 	interest DECIMAL := 12;
 	duration_months INT := 12;
-	start_date DATE := '2025-01-01';
-
+	start_date DATE := '2026-01-01';
+	currency_sign TEXT := '$'; -- € ₽ $
+	
 	current_balance DECIMAL := start_amount;
 	monthly_rate DECIMAL := (interest / 100) / 12;
 	calc_date DATE := start_date;
 	accrued DECIMAL;
 BEGIN
+    PERFORM set_config('lc_time', 'ru_RU.UTF-8', false);
+    INSERT INTO deposit_settings VALUES (currency_sign, start_amount);
+
 	CREATE TEMP TABLE deposit_yield(
 	id SERIAL,
 	date DATE,
 	accured_interest DECIMAL,
 	amount DECIMAL,
-	description TEXT,
-
-	CONSTRAINT pk_deposit_yield PRIMARY KEY(id)
+	description TEXT
 	);
 
 	INSERT INTO deposit_yield (date, accured_interest, amount, description)
-	VALUES (start_date, 0, start_amount,'Изначальный депозит');
+	VALUES (start_date, 0, start_amount, 'Изначальный депозит');
 
 	FOR i IN 1..duration_months LOOP
 		calc_date := start_date + (i * INTERVAL '1 month');
 		accrued := current_balance * monthly_rate;
 		current_balance := current_balance + accrued;
+		
 		INSERT INTO deposit_yield (date, accured_interest, amount, description)
-		VALUES (calc_date, accrued, current_balance,'Проценты по вкладу');
+		VALUES (calc_date, accrued, current_balance, 'Проценты по вкладу за ' || trim(to_char(calc_date, 'TMMonth')));
 	END LOOP;
-
-	RAISE INFO '% ₽ было положено под % %% годовых на срок % месяцев',start_amount, interest, duration_months;
 END
 $$;
 
 SELECT	id AS "№", 
-    	date AS "Дата", 
-    	round(accured_interest, 2) AS "Начислено процентов", 
-    	round(amount, 2) AS "Сумма", 
+    	to_char(date, 'TMDay, DD TMMonth YYYY') AS "Дата", 
+    	round(accured_interest, 2) || ' ' || (SELECT currency_sign FROM deposit_settings) AS "Начислено процентов", 
+    	round(amount, 2) || ' ' || (SELECT currency_sign FROM deposit_settings) AS "Сумма", 
     	description AS "Описание"
 FROM deposit_yield
 ORDER BY id;
+
+SELECT 
+    s.start_sum || ' ' || s.currency_sign AS "Сумма вклада",
+    round(sum(accured_interest), 2) || ' ' || s.currency_sign AS "Начисленные проценты",
+    round(max(amount), 2) || ' ' || s.currency_sign AS "Сумма вклада с процентами",
+    round(((max(amount) - s.start_sum) / s.start_sum) * 100, 2) || '%' AS "Прирост капитала",
+    round((pow(max(amount) / s.start_sum, 1.0 / (count(*) - 1)) - 1) * 12 * 100, 2) || '%' AS "Эффективная ставка"
+FROM deposit_yield, deposit_settings s
+GROUP BY s.start_sum, s.currency_sign;
