@@ -1,0 +1,175 @@
+------------------------UNION--------------------------
+--Словарь имён объектов
+--1) Если где-то будет больше столбцов, чем у остальных, то будет ошибка
+--2) Так же нужно, чтобы был один тип данных
+--3) Псевдонимы нужно записывать в первый запрос, иначе они будут проигнорированы
+--4) Сортировка всегда выполняется в конце
+SELECT title as object_name,
+	   'game' as object_type
+FROM game
+UNION ALL -- ALL, так как нет дубликатов
+SELECT "name",
+	   'genre'
+FROM genre
+UNION ALL
+SELECT username,
+	   'PLAYER'
+FROM player
+ORDER BY object_name, object_type;
+
+--последняя активность в системе
+SELECT username AS record_name,
+	   registration_date AS record_date,
+	   'new_player_added' AS record_type
+FROM player
+WHERE registration_date BETWEEN CURRENT_DATE - INTERVAL '6 month' AND CURRENT_DATE
+UNION
+SELECT username,
+	   purchase_date,
+	   'new_purchase' 
+FROM player AS p, purchase AS pu
+WHERE p.player_id = pu.player_id AND
+	  pu.purchase_date BETWEEN CURRENT_DATE - INTERVAL '6 month' AND CURRENT_DATE
+ORDER BY record_date DESC;
+
+
+--------------------Оператор EXCEPT----------------------
+-- Поиск игроков, которые ничего не купили 
+-- 1-ый запрос возвращает всех -> 
+-- 2-ой получает id всех -> 
+-- 3-ий получает id из покупок
+SELECT *
+FROM player
+WHERE player_id IN (
+	SELECT player_id
+	FROM player
+	EXCEPT
+	SELECT player_id
+	FROM purchase
+)
+
+-- Поиск "забытых игр"
+SELECT title,
+	   price,
+	   release_date
+FROM game
+WHERE game_id IN(
+	SELECT game_id
+	FROM game
+	WHERE release_date < CURRENT_DATE - INTERVAL '1 year'
+	EXCEPT
+	SELECT game_id
+	FROM purchase
+)
+
+
+--------------------Оператор INTERSECT----------------------
+/*Поиск хитовых игр, 
+которые отосятся к популярным жанрам и 
+подтвердили популярность покупками*/
+SELECT g.title,
+	   g.price,
+	   g.release_date
+FROM game AS g, genre AS ge
+WHERE g.genre_id = ge.genre_id AND
+	  ge.popularity_rating >= 8
+INTERSECT
+SELECT g.title,
+	   g.price,
+	   g.release_date
+FROM game AS g, purchase AS p
+WHERE g.game_id = p.game_id
+GROUP BY g.title, g.price, g.release_date
+HAVING COUNT(p.purchase_id) >=3
+
+-- Поиск ветеранов, то есть давно в системе и до сих пор делают покупки
+SELECT username,
+	   email,
+	   registration_date
+FROM player
+WHERE registration_date < '01.01.2017'
+INTERSECT
+SELECT username,
+	   email,
+	   registration_date
+FROM player AS p, purchase AS pu
+WHERE p.player_id = pu.player_id AND
+	  purchase_date BETWEEN CURRENT_DATE - INTERVAL '6 month' AND CURRENT_DATE
+
+--------------------JOIN соединения----------------------
+-- INNER JOIN или просто JOIN
+-- 1) INNER можно не писать, так как он по default-у
+-- 2) Если JOIN внутренний, то нам не важно в каком порядке стоят таблицы
+-- 3) Доп условия where, можно писать через AND сразу в JOIN, но это только у INNER
+SELECT *
+FROM game AS g
+INNER JOIN genre AS ge
+	ON g.genre_id = ge.genre_id AND
+	g.release_date BETWEEN CURRENT_DATE - INTERVAL '5 year' AND CURRENT_DATE
+
+-- LEFT OUTER JOIN
+-- 1) Данные дополняются только у тех, у которых они есть, null не исключается, в отличии от INNER
+-- 2) OUTER, как и INNER можно опустить
+-- 3) Доп условия, как в INNER, сразу в JOIN, писать НЕЛЬЗЯ
+SELECT *
+FROM game AS g
+LEFT OUTER JOIN genre as ge
+	ON g.genre_id = ge.genre_id
+WHERE g.release_date BETWEEN CURRENT_DATE - INTERVAL '5 year' AND CURRENT_DATE
+
+-- RIGHT OUTER JOIN
+SELECT *
+FROM game AS g
+RIGHT JOIN genre AS ge
+	ON g.genre_id = ge.genre_id
+WHERE g.release_date BETWEEN CURRENT_DATE - INTERVAL '5 year' AND CURRENT_DATE
+
+-- FULL OUTER JOIN
+-- LEFT JOIN + RIGHT JOIN
+SELECT *
+FROM game AS g
+FULL JOIN genre as ge
+	ON g.genre_id = ge.genre_id
+
+-- CROSS JOIN
+-- ДЕКАРТОВО ПРОИЗВЕДЕНИЕ (ПЕРЕКРЁСТНОЕ СОЕДИНЕНИЕ)
+SELECT *
+FROM game
+CROSS JOIN genre --все возможные комбинации
+
+
+
+-- Более практичные примеры применения JOIN
+-- Пример 1
+SELECT p.country,
+	   COUNT(DISTINCT p.player_id) AS player_count
+FROM player as p
+JOIN purchase as pu
+	ON p.player_id = pu.player_id
+GROUP BY p.country;
+
+-- Пример 2
+SELECT g.title,
+	   g.release_date,
+	   p.username,
+	   pu.purchase_date,
+	   pu.purchase_price
+FROM game AS g
+JOIN purchase AS pu
+	ON pu.game_id = g.game_id AND 
+	pu.purchase_date BETWEEN '01.12.2025' AND '31.12.2025'
+JOIN player AS p
+	ON p.player_id = pu.player_id AND
+	p.username = 'IvanPetrov'
+
+-- Пример 3 Вывести статистику по странам
+SELECT p.country,
+	   COUNT(DISTINCT p.player_id) AS player_count,
+	   COUNT(pu.purchase_id) AS purchase_count,
+	   COALESCE(SUM(pu.purchase_price), 0) AS total
+FROM player as p
+LEFT JOIN purchase as pu
+	ON p.player_id = pu.player_id
+GROUP BY p.country
+HAVING COALESCE(SUM(pu.purchase_price), 0) > 40000 --В новых версиях можно написать HAVING total > 40000
+ORDER BY total DESC;
