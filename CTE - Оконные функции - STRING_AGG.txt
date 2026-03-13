@@ -1,0 +1,285 @@
+------------CTE (Common Table Expression)------------
+--Механизм определение временных таблиц, 
+--существующий только для одного запроса.
+
+--Основное предназначение - 
+--разбиение сложных запросов на простые части
+
+
+-- Пример 1. Статистика по странам 
+--с поиском активных стран
+WITH country_activity AS (
+	SELECT p.country,
+		   COUNT(DISTINCT p.player_id) AS player_count,
+		   COUNT(pu.purchase_id) AS purchase_count,
+		   SUM(pu.purchase_price) AS country_revenue
+	FROM player as p
+	JOIN purchase as pu
+		ON p.player_id = pu.player_id
+	GROUP BY p.country
+),
+active_countries AS (
+	SELECT *
+	FROM country_activity
+	WHERE player_count >= 2 AND country_revenue > 40000
+)
+SELECT *
+FROM active_countries
+ORDER BY country_revenue DESC;
+
+
+-- Пример 2. Поиск аномалий: игры с ценой, 
+--которая сильно отличается от средней по жанру
+WITH genre_avg_price AS (
+	SELECT	ge.genre_id,
+			ge.name AS genre_name,
+			ROUND(AVG(g.price),2) AS genre_avg_price,
+			ROUND(STDDEV(g.price),2) AS genre_price_std
+	FROM game as g
+	JOIN genre as ge
+		ON g.genre_id = ge.genre_id
+	GROUP BY ge.genre_id, ge.name
+),
+outliers AS (
+	SELECT	g.title,
+			g.price,
+			gap.genre_name,
+			gap.genre_avg_price,
+			ABS((g.price - gap.genre_avg_price) / genre_price_std) AS z_score
+	FROM genre_avg_price AS gap
+	JOIN game as g
+		ON gap.genre_id = g.genre_id
+)
+SELECT *
+FROM outliers
+WHERE z_score > 1.6
+ORDER BY z_score DESC;
+
+
+-------------------ОКОННЫЕ ФУНКЦИИ-------------------
+--Агрегатные оконные функции (SUM, AVG, COUNT...)
+--Ранжирующие функции (ROW_NUMBER, RANK, DENSE_RANK, PERCENT_RANK...)
+--Функции смещения (LAG, LEAD, FIRST_VALUE, LAST_VALUE, NTH_VALUE...)
+
+/* Блок 1. Агрегатные функции в рамках окна */
+-- Пример 1. Сравнение цен игр со средней ценой по жанру
+SELECT ge.name AS genre_name,
+	   g.title,
+	   g.price,
+	   ROUND(AVG(g.price) OVER(
+	       PARTITION BY ge.genre_id
+	   ), 2) AS genre_avg
+FROM game as g
+JOIN genre as ge
+	ON g.genre_id = ge.genre_id
+
+-- Пример 2. Разница между всеми комбинациями предложений окна
+SELECT	p.username,
+		pu.purchase_date,
+		pu.purchase_price,
+		--Сумма всех покупок по всем игрокам
+		SUM(pu.purchase_price) OVER() as total,
+		--Сумма всех покупок конкретного игрока
+		SUM(pu.purchase_price) OVER(
+			PARTITION BY p.player_id
+		) as player_total,
+		--Накопительный итог по всем игрокам
+		SUM(pu.purchase_price) OVER(
+			ORDER BY p.username, pu.purchase_date
+		) as running_total,
+		--Накопительный итог по конкретному игроку
+		SUM(pu.purchase_price) OVER(
+			PARTITION BY p.player_id
+			ORDER BY pu.purchase_date
+		)
+FROM player AS p
+JOIN purchase AS pu
+	ON p.player_id = pu.player_id
+ORDER BY running_total;
+
+
+/* Блок 2. Ранжирующие функции*/
+-- Пример 1. Топ 3 самых дорогих игр в каждом жанре
+WITH games_ranked AS (
+	SELECT	ge.name AS game_genre,
+			title,
+			price,
+			release_date,
+			ROW_NUMBER() OVER(
+				PARTITION BY ge.genre_id
+				ORDER BY g.price DESC
+			) AS price_rank
+	FROM game as g
+	JOIN genre as ge
+		ON g.genre_id = ge.genre_id
+)
+SELECT	game_genre,
+		title,
+		price,
+		release_date
+FROM games_ranked
+WHERE price_rank <=3
+
+-- Пример 2. Разница между ROW_NUMBER, RANK, DENSE_RANK
+SELECT	ge.name AS genre_name,
+		g.title,
+		g.price,
+		--НУМЕРАЦИЯ СТРОК
+		ROW_NUMBER() OVER(
+			ORDER BY g.price DESC
+		),
+		--У ИГР С ОДИНАКОВОЙ ЦЕНОЙ ПРИСВАИВАЕТСЯ ОДИНАКОВЫЙ РАНГ, НО ОНИ СЧИТАЮТСЯ ДАЛЬШЕ
+		--ПОЭТОМУ ПОСЛЕ 2 МОЖЕТ ПОЙТИ 6 ИЛИ ДРУГОЕ ЛЮБОЕ ЧИСЛО, ЗАВИСИМО ОТ УСЛОВИЙ
+		RANK() OVER(
+			ORDER BY g.price DESC
+		),
+		--РАБОТАЕТ ТАКЖЕ, КАК RANK, НО ПОСЛЕ 2 БУДЕТ 3 И ТАК ДАЛЕЕ
+		DENSE_RANK() OVER(
+			ORDER BY g.price DESC
+		)
+FROM game AS g
+JOIN genre AS ge
+	ON g.genre_id = ge.genre_id
+
+-- Пример 3. Деление игр на кварталы по цене
+SELECT	title,
+		price,
+		release_date,
+		NTILE(4) OVER(
+			ORDER BY price DESC
+		) AS price_quartile
+FROM game;
+
+
+/* Блок 3. Функции смещения */
+-- Пример 1. Анализ динамики покупок игроков
+SELECT	p.username,
+		pu.purchase_date,
+		LAG(pu.purchase_date) OVER(
+			PARTITION BY p.player_id
+			ORDER BY pu.purchase_date
+		) AS prev_purchase_date,
+		pu.purchase_date - LAG(pu.purchase_date) OVER(
+			PARTITION BY p.player_id
+			ORDER BY pu.purchase_date
+		) AS days_between_purchases
+FROM player AS p
+JOIN purchase AS pu
+	ON p.player_id = pu.player_id AND 
+	p.username = 'AlexMaster';
+
+-- Пример 2. Получить цены первой и последней покупки игрока
+SELECT	DISTINCT
+		p.username,
+		FIRST_VALUE(pu.purchase_price) OVER(
+			PARTITION BY p.player_id
+			ORDER BY pu.purchase_date
+		) AS first_purchase_price,
+		LAST_VALUE(pu.purchase_price) OVER(
+			PARTITION BY p.player_id
+			ORDER BY pu.purchase_date
+			RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING 
+		) AS last_purchase_price,
+FROM player AS p
+JOIN purchase AS pu
+	ON p.player_id = pu.player_id
+
+-- Пример 3.1. Получить цены первой и последней покупки игрока с детализацией
+SELECT	DISTINCT
+		p.username,
+		FIRST_VALUE(g.title) OVER w AS first_purchased_title,
+		FIRST_VALUE(g.release_date) OVER w AS first_purchase_game_release_date,
+		FIRST_VALUE(pu.purchase_date) OVER w AS first_purchase_date,
+		FIRST_VALUE(pu.purchase_price) over w AS first_purchase_price
+FROM player AS p
+JOIN purchase as pu
+	ON p.player_id = pu.player_id
+JOIN game AS g
+	ON g.game_id = pu.game_id
+WINDOW w AS (
+	PARTITION BY p.player_id
+	ORDER BY pu.purchase_price
+	RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+)
+
+-- Пример 3.2.
+WITH purchases_ranked AS (
+	SELECT	p.username,
+			g.title,
+			g.release_date,
+			pu.purchase_date,
+			pu.purchase_price,
+			ROW_NUMBER() OVER(
+				PARTITION BY p.player_id
+				ORDER BY pu.purchase_date
+			) AS asc_rank,
+			ROW_NUMBER() OVER(
+				PARTITION BY p.player_id
+				ORDER BY pu.purchase_date DESC
+			) AS desc_rank
+	FROM player AS p
+	JOIN purchase AS pu
+		ON p.player_id = pu.player_id
+	JOIN game AS g
+		ON g.game_id = pu.game_id
+)
+SELECT	username,
+		title,
+		release_date,
+		purchase_date,
+		purchase_price
+FROM purchases_ranked
+WHERE asc_rank = 1 OR desc_rank = 1
+
+
+/*Фишка оконных функций - агрегатная функция от агрегатной функции*/
+-- Пример 1. Процент от общего
+SELECT	country,
+		COUNT(player_id) AS player_count,
+		ROUND(COUNT(player_id) / SUM(COUNT(player_id)) OVER() * 100.0, 2)
+FROM player
+GROUP BY country
+
+-- Пример 2. Поиск "Китов" - игроки, 
+--у которых суммарные траты значительно 
+--превышают средние траты в их стране
+WITH player_country_stats AS (
+	SELECT	p.username,
+			p.country,
+			SUM(pu.purchase_price) AS player_total,
+			ROUND(AVG(SUM(pu.purchase_price)) OVER(
+				PARTITION BY p.country
+			),2) AS country_avg
+	FROM player AS p
+	JOIN purchase AS pu
+		ON p.player_id = pu.player_id
+	GROUP BY p.username, p.country
+)
+SELECT	*,
+		ROUND((player_total - country_avg) / country_avg * 100.0, 2) AS excess_percentage
+FROM player_country_stats
+ORDER BY excess_percentage DESC
+
+
+--------------------- STRING_AGG --------------------
+--Это функция агригации строк
+
+-- Пример 1. Получить страны, кол-во игроков в этой стране и список игроков
+SELECT	country,
+		COUNT(player_id) AS player_count,
+		STRING_AGG(username, ', ') AS player_list
+FROM player
+GROUP BY country
+
+-- Пример 2. Получить жанры, количество игр в жанре, список игр с их ценами
+SELECT	ge.name AS game_genre,
+		COUNT(game_id) as game_count,
+		STRING_AGG(
+			CONCAT(g.title, ' (', g.price, ')'),
+			', '
+			ORDER BY g.price DESC
+		) AS game_list
+FROM game as g
+JOIN genre AS ge
+	ON g.genre_id = ge.genre_id
+GROUP BY ge.name
