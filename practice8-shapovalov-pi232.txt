@@ -1,0 +1,81 @@
+CREATE DATABASE hospital;
+
+CREATE TABLE IF NOT EXISTS Patient(
+	patient_id SERIAL,
+	fullname TEXT NOT NULL,
+	category TEXT NOT NULL,
+	dateOfBirth DATE NOT NULL,
+
+	CONSTRAINT pk_patient_id PRIMARY KEY(patient_id),
+	CONSTRAINT c_patient_category CHECK(category IN ('сторонний', 'пенсионер', 'молодой'))
+);
+
+CREATE TABLE IF NOT EXISTS Doctor(
+	doctor_id SERIAL,
+	fullname TEXT NOT NULL,
+	specialty TEXT NOT NULL,
+	experience INT NOT NULL,
+	dateOfBirth DATE NOT NULL,
+
+	CONSTRAINT pk_doctor_id PRIMARY KEY(doctor_id),
+	CONSTRAINT c_doctor_experience CHECK(experience >= 0),
+	CONSTRAINT c_doctor_specialty CHECK(specialty IN ('врач-терапевт', 'врач-окулист', 'хирург'))
+);
+
+CREATE TABLE IF NOT EXISTS Appointment(
+	appointment_id SERIAL,
+	patient_id INT NOT NULL,
+	doctor_id INT NOT NULL,
+	apptime DATE NOT NULL,
+	cabinet INT NOT NULL,
+
+	CONSTRAINT pk_appointment_id PRIMARY KEY(appointment_id),
+	CONSTRAINT fk_appointment_patient_id FOREIGN KEY(patient_id)
+		REFERENCES Patient(patient_id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT fk_appointment_doctor_id FOREIGN KEY(doctor_id)
+		REFERENCES Doctor(doctor_id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT c_appointment_cabinet CHECK(cabinet >= 0)
+);
+
+INSERT INTO Patient (fullname, category, dateOfBirth) VALUES
+('Смиронова Анна Ивановна', 'пенсионер', '1965-05-15'),
+('Сидоров Сидор Сидорович', 'пенсионер', '1964-04-25'),
+('Кузнецов Николай Николаевич', 'пенсионер', '1955-02-17'),
+('Васильева Елена Петровна', 'пенсионер', '1970-01-27'),
+('Михайлов Михаил Михайлович', 'пенсионер', '1955-12-04'),
+('Иванов Сергей Петрович', 'пенсионер', '1965-05-15'),
+
+('Новикова Татьяна Сергеевна', 'сторонний', '2000-06-24'),
+('Попов Алексей Алексеевич', 'сторонний', '1975-02-06'),
+('Орлов Дмитрий Дмитриевич', 'сторонний', '2005-11-18'),
+('Шаповалов Сергей Александрович', 'сторонний', '1999-12-29'),
+('Кель Олеся Александровна', 'сторонний', '1980-09-04'),
+
+('Капустин Никита Сергеевич', 'молодой', '2000-07-15'),
+('Мелихов Арсений Викторович', 'молодой', '2005-06-15'),
+('Саса Глеб Борисович', 'молодой', '2012-09-15'),
+('Попкова Ульяна Артёмова', 'молодой', '2007-04-15'),
+('Дмитров Дмитрий Дмитревич', 'молодой', '2023-07-15');
+
+
+INSERT INTO Doctor(fullname, specialty, experience, dateOfBirth) VALUES
+('Иванов Иван Иванович', 'врач-терапевт', 3, '1985-05-30'),
+('Максимов Максим Максимович', 'врач-терапевт', 4, '1993-02-19'),
+('Харитонов Артём Артёмович', 'врач-терапевт', 8, '1974-06-04'),
+('Олегов Олег Олегович', 'врач-терапевт', 1, '1995-11-28'),
+('Столяров Дмитрий Борисович', 'врач-терапевт', 10, '1975-12-17'),
+
+('Музыченко Юрий Викторович', 'врач-окулист', 0, '1985-05-15'),
+('Шаповалов Александр Михайлович', 'врач-окулист', 2, '1985-05-15'),
+('Семенюк Владимир Сергеевич', 'врач-окулист', 11, '1985-05-15'),
+('Староваров Андрей Палыч', 'врач-окулист', 7, '1985-05-15'),
+('Окулистов Чарв Окулистович', 'врач-окулист', 5, '1985-05-15'),
+
+('Хирургов Грурих Семёнов', 'хирург', 3, '1985-05-15'),
+('Дюбуа Гарри', 'хирург', 12, '1985-05-15'),
+('Кацураги Ким', 'хирург', 9, '1985-05-15'),
+('Николаев Кирпич Николаевич', 'хирург', 10, '1985-05-15'),
+('Самосвалов Трамвай Тракторович', 'хирург', 5, '1985-05-15');
+
