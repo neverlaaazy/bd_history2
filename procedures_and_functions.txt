@@ -1,0 +1,277 @@
+-----------------------------Функции-----------------------------
+
+
+-- Пример 1 - Возврат скалярного занчения - общая выручка по жанру
+CREATE OR REPLACE FUNCTION get_genre_revenue(IN p_genre_name TEXT)
+RETURNS DECIMAL(12, 2)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+	v_genre_id INT;
+	V_revenue DECIMAL(12, 2);
+BEGIN
+	SELECT g.genre_id INTO v_genre_id
+	FROM genre as g
+	WHERE g.name = p_genre_name;
+
+	SELECT SUM(p.purchase_price) INTO v_revenue
+	FROM game as g
+	JOIN purchase as p
+		ON p.game_id = g.game_id
+		AND g.genre_id = v_genre_id;
+
+	RETURN v_revenue;
+END;
+$$
+
+SELECT get_genre_revenue('RPG');
+
+
+-- Пример 2 - Возврат таблицы - топ игр по продажам за перод времени
+CREATE OR REPLACE FUNCTION top_selling_games(
+	p_start_date DATE,
+	p_end_date DATE,
+	p_limit INT = 5
+)
+RETURNS TABLE(
+	title TEXT,
+	sales_count INT
+)
+LANGUAGE sql
+AS $$
+	SELECT	g.title,
+			COUNT(p.purchase_id) as sales_count
+	FROM game as g
+	JOIN purchase as p
+		ON g.game_id = p.game_id
+		AND p.purchase_date BETWEEN p_start_date AND p_end_date
+	GROUP BY g.title
+	ORDER BY sales_count DESC
+	LIMIT p_limit;
+$$
+
+SELECT *
+FROM top_selling_games('01.01.2025', '25.05.2025');
+
+-- Пример 3 - Возврат VOID - используются для действий, но лучше использовать процедуры
+CREATE OR REPLACE FUNCTION log_message(p_severity TEXT, p_msg TEXT)
+RETURNS VOID
+AS $$
+BEGIN
+	CREATE TEMP TABLE IF NOT EXISTS logs(
+		log_id SERIAL,
+		created_at TIMESTAMP DEFAULT now(),
+		severity TEXT,
+		message TEXT
+	);
+
+	INSERT INTO logs(severity, message)
+	VALUES (p_severity, p_msg);
+
+	RAISE INFO '[%] % %', now(), p_severity, p_msg;
+END;
+$$
+LANGUAGE plpgsql;
+
+SELECT log_message('INFO', 'Plese change the password within 24 hours');
+SELECT *
+FROM logs;
+
+
+-----------------------------Процедуры-----------------------------
+-- Пример 1 - Изменение стоимости игры
+CREATE OR REPLACE PROCEDURE update_game_price(
+	p_game_title TEXT,
+	p_new_price DECIMAL(12, 2)
+)
+AS $$
+DECLARE
+	v_game_id INT;
+BEGIN
+	IF p_new_price < 0 THEN
+		RAISE EXCEPTION 'Стоимосвть игры не может быть отрицательной';
+	END IF; 
+
+	SELECT game_id INTO v_game_id
+	FROM game
+	WHERE title = p_game_title;
+
+	/*
+	После каждой операции SELECT INTO, UPDATE, INSERT, DELETE, FETCH
+	значение устанавливается в TRUE если операция зтронула хотя бы одну строку
+	*/
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'игра % не существует', p_game_title;
+	END IF;
+
+	UPDATE game
+	SET price = p_new_price
+	WHERE game_id = v_game_id;
+END;
+$$
+LANGUAGE plpgsql;
+
+SELECT * FROM game;
+CALL update_game_price('Civilization VI', 2500);
+
+
+-- Пример 2 - Ворзвращение результата через OUT параметр
+CREATE OR REPLACE PROCEDURE register_player(
+	IN p_username TEXT,
+	IN p_email TEXT,
+	IN p_country TEXT,
+	OUT record_id INT
+)
+AS $$
+BEGIN
+	IF EXISTS(SELECT 1 FROM player WHERE email = p_email) THEN
+		RAISE EXCEPTION 'почта % уже используется', p_email;
+	END IF;
+
+	INSERT INTO player(registration_date, username, email, country)
+	VALUES (CURRENT_DATE, p_username, p_email, p_country)
+	RETURNING player_id INTO record_id;
+END;
+$$
+LANGUAGE plpgsql;
+
+SELECT setval(
+	pg_get_serial_sequence('player', 'player_id'),
+	(SELECT MAX(player_id) FROM player)
+);
+
+DO $$
+DECLARE v_player_id INT;
+BEGIN
+	CALL register_player('ivanov_ii', 'invanov_ii@yandex.ru', 'Россия', v_player_id);
+	RAISE INFO 'Новый игрок зарегистрирован под id %', v_player_id;
+END;
+$$
+SELECT *
+FROM player;
+
+
+DROP PROCEDURE update_genre_rating_based_on_sales;
+-----------------------------Курсоры-----------------------------
+-- Пример 1 - Обновление рейтинга жнаров на основе продаж за период времени
+CREATE OR REPLACE PROCEDURE update_genre_rating_based_on_sales(
+	p_start_date DATE = '01.01.0001',
+	p_end_date DATE = CURRENT_DATE
+)
+AS $$
+DECLARE
+	cur_genre_sales CURSOR FOR
+		SELECT	gr.genre_id,
+				COUNT(p.purchase_id) as sales_count
+		FROM game as g
+		JOIN purchase as p
+			ON p.game_id = g.game_id
+			AND g.genre_id IS NOT NULL
+			AND p.purchase_date BETWEEN p_start_date AND p_end_date
+		RIGHT JOIN genre as gr
+			ON g.genre_id = gr.genre_id
+		GROUP BY gr.genre_id
+		ORDER BY gr.genre_id;
+
+	-- 1 подход
+	v_genre_id INT;
+	v_sales_count INT;
+	v_new_rating INT;
+
+	-- 2 подход
+	v_record record;
+BEGIN
+	-- 1 подход - получение записей с помощью FETCH
+	/*OPEN cur_genre_sales;
+	LOOP
+		FETCH NEXT FROM cur_genre_sales INTO v_genre_id, v_sales_count;
+		EXIT WHEN NOT FOUND;
+
+		v_new_rating := (v_sales_count * 0.75)::INT;
+		IF v_new_rating > 10 THEN
+			v_new_rating := 10;
+		ELSIF v_new_rating <= 0 THEN
+			v_new_rating := 1;
+		END IF;
+
+		UPDATE genre
+		SET popularity_rating = v_new_rating
+		WHERE genre_id = v_genre_id;
+
+		RAISE INFO 'genre % updated: % sales -> % rating', v_genre_id, v_sales_count, v_new_rating;
+	END LOOP;*/
+
+	-- 2 подход - использование record и перебор записей через цикл
+	FOR v_record IN cur_genre_sales LOOP
+		v_new_rating := v_record.sales_count * 0.75;
+		IF v_new_rating > 10 THEN
+			v_new_rating := 10;
+		ELSIF v_new_rating <= 0 THEN
+			v_new_rating := 1;
+		END IF;
+
+		UPDATE genre
+		SET popularity_rating = v_new_rating
+		WHERE genre_id = v_record.genre_id;
+
+		RAISE INFO 'genre % updated: % sales -> % rating', v_record.genre_id, v_record.sales_count, v_new_rating;
+	END LOOP;
+END;
+$$
+LANGUAGE plpgsql;
+
+SELECT * FROM genre;
+CALL update_genre_rating_based_on_sales('01.01.2025', '01.06.2025');
+
+
+
+-- Пример 2 - Применение сезонной скидки ко всем играм жанра
+CREATE OR REPLACE PROCEDURE apply_discount_by_genre(
+	p_genre_name TEXT,
+	p_discount_percent INT = 10
+) AS $$
+DECLARE
+	cur_games_with_genre CURSOR(genre_name TEXT) FOR
+		SELECT	g.price
+		FROM game as g
+		JOIN genre as gr
+			ON g.genre_id = gr.genre_id
+			AND gr.name = genre_name
+		FOR UPDATE OF g;
+
+	v_new_price DECIMAL(12, 2);
+	v_current_price DECIMAL(12, 2);
+BEGIN
+	IF p_discount_percent < 1 OR p_discount_percent > 100 THEN
+		RAISE EXCEPTION 'Процент скидки должен быть в диапазоне от 1 до 100';
+	END IF;
+
+	OPEN cur_games_with_genre(p_genre_name);
+
+	LOOP
+		FETCH NEXT FROM cur_games_with_genre INTO v_current_price;
+		EXIT WHEN NOT FOUND;
+
+		v_new_price := GREATEST(5.00, v_current_price * (100 - p_discount_percent) / 100);
+
+		UPDATE game
+		SET price = v_new_price
+		WHERE CURRENT OF cur_games_with_genre;
+	END LOOP;
+
+	CLOSE cur_games_with_genre;
+END;
+$$
+LANGUAGE plpgsql;
+
+SELECT * FROM game;
+CALL apply_discount_by_genre('RPG', 100);
+
+
+
+
+
+
+
+
+

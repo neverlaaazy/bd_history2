@@ -1,0 +1,510 @@
+----------------------Создание БД, создание таблиц-заполение--------------------------
+
+CREATE DATABASE Ashan;
+
+CREATE TABLE Regions (
+    region_id SERIAL,
+    region_name TEXT NOT NULL,
+    salary_coeff DECIMAL(10, 2),
+    subsistence_min DECIMAL(10, 2),
+
+	CONSTRAINT pk_region_id PRIMARY KEY(region_id)
+);
+
+CREATE TABLE Cities (
+    city_id SERIAL,
+    city_name TEXT NOT NULL,
+    region_id INT NOT NULL,
+
+	CONSTRAINT pk_city_id PRIMARY KEY(city_id),
+	CONSTRAINT fk_cities_region_id FOREIGN KEY(region_id)
+		REFERENCES Regions(region_id)
+		ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE Suppliers (
+    supplier_id SERIAL,
+    supplier_name TEXT NOT NULL,
+    supplier_type TEXT NOT NULL,
+    region_id INT REFERENCES Regions(region_id),
+
+	CONSTRAINT pk_supplier_id PRIMARY KEY(supplier_id),
+	CONSTRAINT c_suppliers_supplier_type CHECK (supplier_type IN ('Federal', 'Regional')),
+	CONSTRAINT fk_suppliers_region_id FOREIGN KEY(region_id)
+		REFERENCES Regions(region_id)
+		ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE Products (
+    product_id SERIAL,
+    product_name TEXT NOT NULL,
+    retail_price DECIMAL(10, 2) DEFAULT 0,
+
+	CONSTRAINT pk_product_id PRIMARY KEY(product_id)
+);
+
+CREATE TABLE Employees (
+    emp_id SERIAL,
+    full_name TEXT NOT NULL,
+    salary_base DECIMAL(10, 2),
+    city_id INT NOT NULL,
+    total_salary DECIMAL(10, 2),
+
+	CONSTRAINT pk_emp_id PRIMARY KEY(emp_id),
+	CONSTRAINT fk_emp_city_id FOREIGN KEY(city_id)
+		REFERENCES Cities(city_id)
+		ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE Equipment (
+    eq_id SERIAL,
+    eq_type TEXT,
+    city_id INT NOT NULL,
+    last_service_date DATE,
+    next_service_date DATE,
+    status TEXT DEFAULT 'Working',
+
+	CONSTRAINT pk_eq_id PRIMARY KEY(eq_id),
+	CONSTRAINT fk_eq_city_id FOREIGN KEY(city_id)
+		REFERENCES Cities(city_id)
+		ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE RepairLog (
+    repair_id SERIAL,
+    eq_id INT REFERENCES Equipment(eq_id),
+    breakdown_desc TEXT,
+    repair_start DATE,
+    repair_end DATE,
+    repair_status VARCHAR(20),
+
+	CONSTRAINT pk_repair_id PRIMARY KEY(repair_id),
+	CONSTRAINT fk_repair_eq_id FOREIGN KEY(eq_id)
+		REFERENCES Equipment(eq_id)
+		ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE Stock (
+    city_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT DEFAULT 0,
+    PRIMARY KEY (city_id, product_id),
+
+	CONSTRAINT fk_stock_city_id FOREIGN KEY(city_id)
+		REFERENCES Cities(city_id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT fk_stock_product_id FOREIGN KEY(product_id)
+		REFERENCES Products(product_id)
+		ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE SupplyOrders (
+    order_id SERIAL,
+    supplier_id INT NOT NULL,
+    city_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT,
+    unit_price DECIMAL(10, 2),
+    supply_date DATE,
+
+	CONSTRAINT pk_order_id PRIMARY KEY(order_id),
+	CONSTRAINT fk_order_supplier_id FOREIGN KEY(supplier_id)
+		REFERENCES Suppliers(supplier_id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT fk_order_city_id FOREIGN KEY(city_id)
+		REFERENCES Cities(city_id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT fk_order_product_id FOREIGN KEY(product_id)
+		REFERENCES Products(product_id)
+);
+
+CREATE TABLE Sales (
+    sale_id SERIAL,
+    city_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT,
+    sale_date DATE,
+
+	CONSTRAINT pk_sale_id PRIMARY KEY(sale_id),
+	CONSTRAINT fk_sales_city_id FOREIGN KEY(city_id)
+		REFERENCES Cities(city_id)
+		ON UPDATE CASCADE ON DELETE SET NULL,
+	CONSTRAINT fk_sales_product_id FOREIGN KEY(product_id)
+		REFERENCES Products(product_id)
+		ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+
+INSERT INTO Regions (region_name, salary_coeff, subsistence_min) VALUES
+('Московская область', 1.5, 21000),
+('Новосибирская область', 1.2, 16000),
+('Казахстан (Алматы)', 1.1, 40000);
+
+INSERT INTO Cities (city_name, region_id) VALUES
+('Москва', 1),
+('Химки', 1),
+('Новосибирск', 2),
+('Алматы', 3);
+
+INSERT INTO Suppliers (supplier_name, supplier_type, region_id) VALUES
+('Ашан Трейд Россия', 'Federal', NULL),
+('Московский Молочный Завод', 'Regional', 1),
+('Сибирская Ферма', 'Regional', 2),
+('Птицефабрика Северная', 'Federal', NULL),
+('Местная Курочка', 'Regional', 1);
+
+INSERT INTO Products (product_name) VALUES
+('Горох'),
+('Молоко'),
+('Куриная грудка'),
+('Весы электронные');
+
+INSERT INTO Employees (full_name, salary_base, city_id) VALUES
+('Иванов Иван', 50000, 1),
+('Петров Петр', 40000, 3),
+('Сидоров Карим', 150000, 4);
+
+INSERT INTO Equipment (eq_type, city_id, last_service_date, next_service_date, status) VALUES
+('Холодильник', 1, '2023-12-01', '2024-03-01', 'Working'),
+('Печь', 1, '2024-01-15', '2024-04-15', 'Broken'),
+('Весы', 3, '2024-02-01', '2024-05-01', 'Working');
+
+INSERT INTO SupplyOrders (supplier_id, city_id, product_id, quantity, unit_price, supply_date)VALUES 
+(1, 1, 1, 100, 50.00, '2024-01-10'),
+(4, 1, 3, 50, 200.00, '2024-02-10'),
+(5, 1, 3, 30, 210.00, '2024-02-11');
+
+INSERT INTO Stock (city_id, product_id, quantity) VALUES
+(1, 1, 100),
+(1, 3, 80),
+(3, 1, 0);
+
+
+-------------------------ЗАДАНИЯ----------------------------
+--1)Выявление товаров, которые поставляются только федеральными 
+--или только областными поставщиками.
+CREATE OR REPLACE FUNCTION get_exclusive_supplied_products()
+RETURNS TABLE(product_name TEXT, supplier_type TEXT)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT	p.product_name, 
+			MAX(s.supplier_type)
+    FROM Products AS p
+    JOIN SupplyOrders AS so 
+		ON p.product_id = so.product_id
+    JOIN Suppliers AS s 
+		ON so.supplier_id = s.supplier_id
+    GROUP BY p.product_id, p.product_name
+    HAVING COUNT(DISTINCT s.supplier_type) = 1;
+END;
+$$
+
+--2)Выявление товаров, которые в город «ХХХ» поставляются 
+--как минимум одним федеральным и одним областным поставщиком.
+CREATE OR REPLACE FUNCTION get_mixed_supplied_products(p_city_name TEXT)
+RETURNS TABLE(product_name TEXT) 
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT p.product_name
+    FROM Products AS p
+    JOIN SupplyOrders AS so 
+		ON p.product_id = so.product_id
+    JOIN Suppliers AS s 
+		ON so.supplier_id = s.supplier_id
+    JOIN Cities AS c 
+		ON so.city_id = c.city_id AND 
+		c.city_name = p_city_name
+    GROUP BY p.product_id, p.product_name
+    HAVING COUNT(DISTINCT s.supplier_type) = 2;
+END;
+$$ 
+
+--3)Добавление нового поставщика.
+CREATE OR REPLACE PROCEDURE add_supplier(
+		p_name TEXT, 
+		p_type TEXT, 
+		p_region_id INT
+) 
+AS $$
+BEGIN
+    INSERT INTO Suppliers (supplier_name, supplier_type, region_id)
+    VALUES (p_name, p_type, p_region_id);
+END;
+$$ 
+LANGUAGE plpgsql;
+
+--4)Удаление поставщика.
+CREATE OR REPLACE PROCEDURE delete_supplier(p_id INT) 
+AS $$
+BEGIN
+    DELETE FROM Suppliers WHERE supplier_id = p_id;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+
+CALL delete_supplier(3);
+CALL add_supplier('Сибирская Ферма', 'Regional', 2);
+
+--5)Добавление нового сотрудника и автоматический расчёт его з/п.
+CREATE OR REPLACE PROCEDURE add_employee(
+		p_name TEXT, 
+		p_base DECIMAL, 
+		p_city_id INT) 
+AS $$
+DECLARE
+    v_coeff DECIMAL;
+    v_subsistence DECIMAL;
+    v_total DECIMAL;
+BEGIN
+    SELECT r.salary_coeff, r.subsistence_min INTO v_coeff, v_subsistence
+    FROM Cities AS c
+    JOIN Regions AS r 
+		ON c.region_id = r.region_id AND
+		c.city_id = p_city_id;
+
+    v_total := (p_base * v_coeff) + (v_subsistence * 0.08);
+
+    INSERT INTO Employees (full_name, salary_base, city_id, total_salary)
+    VALUES (p_name, p_base, p_city_id, v_total);
+END;
+$$ LANGUAGE plpgsql;
+
+CALL add_employee('Шаповалов Сергей', 45000, 3);
+
+--6)Массовое обновление дат следующего обслуживания после ремонта 
+--(например, +90 дней со дня последнего ремонта).
+CREATE OR REPLACE PROCEDURE mass_update_service_dates() 
+AS $$
+BEGIN
+    UPDATE Equipment AS e
+    SET next_service_date = rl.repair_end + INTERVAL '90 days'
+    FROM RepairLog AS rl
+    WHERE e.eq_id = rl.eq_id AND 
+	rl.repair_status = 'Completed' AND 
+	rl.repair_end IS NOT NULL;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+CALL mass_update_service_dates();
+
+--7)Выявление оборудования, которое надо обслужить в ближайший день/неделю/месяц.
+CREATE OR REPLACE FUNCTION get_equipment_to_service(p_interval TEXT)
+RETURNS SETOF Equipment 
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT * FROM Equipment
+    WHERE next_service_date <= CURRENT_DATE + (p_interval)::INTERVAL;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+--8)Поставка оборудования в очередь на ремонт.
+CREATE OR REPLACE PROCEDURE send_to_repair(
+		p_eq_id INT, 
+		p_desc TEXT
+) 
+AS $$
+BEGIN
+    UPDATE Equipment SET status = 'Broken' WHERE eq_id = p_eq_id;
+    INSERT INTO RepairLog (eq_id, breakdown_desc, repair_start, repair_status)
+    VALUES (p_eq_id, p_desc, CURRENT_DATE, 'In Progress');
+END;
+$$ 
+LANGUAGE plpgsql;
+
+CALL send_to_repair(2, 'Перегорел ТЭН, требуется замена нагревательного элемента');
+
+--9)Снятие оборудования с ремонта.
+CREATE OR REPLACE PROCEDURE finish_repair(p_repair_id INT) 
+AS $$
+BEGIN
+    UPDATE RepairLog 
+    SET repair_end = CURRENT_DATE, repair_status = 'Completed' 
+    WHERE repair_id = p_repair_id;
+
+    UPDATE Equipment 
+    SET status = 'Working', last_service_date = CURRENT_DATE 
+    WHERE eq_id = (SELECT eq_id FROM RepairLog WHERE repair_id = p_repair_id);
+END;
+$$ 
+LANGUAGE plpgsql;
+
+CALL finish_repair(1);
+
+--10)Вывод истории поломок и ремонтов/техобслуживаний оборудования «ХХХ».
+CREATE OR REPLACE FUNCTION get_equipment_history(p_eq_id INT)
+RETURNS TABLE(
+	date_event DATE, 
+	event_type TEXT, 
+	description TEXT
+) 
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT repair_start, 'Repair Started', breakdown_desc FROM RepairLog WHERE eq_id = p_eq_id
+    UNION ALL
+    SELECT repair_end, 'Repair Finished', 'Status: ' || repair_status FROM RepairLog WHERE eq_id = p_eq_id AND repair_end IS NOT NULL
+    ORDER BY 1 DESC;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+SELECT get_equipment_history(2);
+
+--11)Добавление новой поставки.
+CREATE OR REPLACE PROCEDURE add_supply(
+		p_supp_id INT, 
+		p_city_id INT, 
+		p_prod_id INT, 
+		p_qty INT, 
+		p_price DECIMAL
+) 
+AS $$
+BEGIN
+    INSERT INTO SupplyOrders (
+			supplier_id, 
+			city_id, 
+			product_id, 
+			quantity, 
+			unit_price, 
+			supply_date
+	)
+    VALUES (
+			p_supp_id, 
+			p_city_id, 
+			p_prod_id, 
+			p_qty, 
+			p_price,
+			CURRENT_DATE
+	);
+
+    INSERT INTO Stock (city_id, product_id, quantity)
+    VALUES (p_city_id, p_prod_id, p_qty)
+    ON CONFLICT (city_id, product_id) DO UPDATE SET quantity = Stock.quantity + p_qty;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+CALL add_supply(1, 1, 1, 100, 50.00);
+
+--12)Добавлена новой продажи с контролем остатков.
+CREATE OR REPLACE PROCEDURE make_sale(
+		p_city_id INT, 
+		p_prod_id INT, 
+		p_qty INT
+) 
+AS $$
+DECLARE
+    v_stock INT;
+BEGIN
+    SELECT quantity INTO v_stock 
+	FROM Stock 
+	WHERE city_id = p_city_id AND 
+	product_id = p_prod_id;
+    
+    IF v_stock IS NULL OR v_stock < p_qty THEN
+        RAISE EXCEPTION 'Недостаточно товара на складе';
+    END IF;
+
+    UPDATE Stock SET quantity = quantity - p_qty WHERE city_id = p_city_id AND product_id = p_prod_id;
+    INSERT INTO Sales (
+			city_id, 
+			product_id, 
+			quantity, 
+			sale_date) 
+			VALUES (
+				p_city_id, 
+				p_prod_id, 
+				p_qty, 
+				CURRENT_DATE);
+END;
+$$ 
+LANGUAGE plpgsql;
+
+--13)Расчёт проданных товаров за период времени.
+CREATE OR REPLACE FUNCTION get_sales_report(p_from DATE, p_to DATE)
+RETURNS TABLE(product_name TEXT, total_qty BIGINT) 
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT p.product_name, SUM(s.quantity)
+    FROM Sales s
+    JOIN Products p 
+		ON s.product_id = p.product_id AND
+		s.sale_date BETWEEN p_from AND 
+		p_to
+    GROUP BY p.product_name;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+--14)Аналитика поставок поставщика «ХХХ». 
+--Для заданного поставщика и периода анализируются все его поставки: 
+--рассчитывается средняя цена за единицу товара, 
+--она сравнивается со средней ценой того же товара у всех других поставщиков.
+CREATE OR REPLACE FUNCTION analyze_supplier_prices(
+		p_supp_id INT, 
+		p_from DATE, 
+		p_to DATE)
+RETURNS TABLE(
+		product_id INT, 
+		avg_supp_price DECIMAL, 
+		market_avg_price DECIMAL
+) 
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        so.product_id,
+        AVG(so.unit_price) FILTER (WHERE so.supplier_id = p_supp_id),
+        AVG(so.unit_price) FILTER (WHERE so.supplier_id <> p_supp_id)
+    FROM SupplyOrders AS so
+    WHERE so.supply_date BETWEEN p_from AND p_to
+    GROUP BY so.product_id;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+--15)Пересчет розничной цены товара на основе всех поставок.
+CREATE OR REPLACE PROCEDURE recalculate_retail_prices() 
+AS $$
+BEGIN
+    UPDATE Products AS p
+    SET retail_price = (
+        SELECT AVG(unit_price) * 1.3 
+        FROM SupplyOrders so 
+        WHERE so.product_id = p.product_id
+    );
+END;
+$$ 
+LANGUAGE plpgsql;
+
+--16)Расчет среднего времени ремонта оборудования по его типам: 
+--для каждого типа оборудования рассчитать среднюю длительность ремонта 
+--на основе «завершённых» записей в журнале поломок.
+CREATE OR REPLACE FUNCTION get_avg_repair_time()
+RETURNS TABLE(
+		eq_type TEXT, 
+		avg_days DECIMAL) 
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        e.eq_type,
+        AVG(rl.repair_end - rl.repair_start)::DECIMAL
+    FROM Equipment AS e
+    JOIN RepairLog AS rl 
+		ON e.eq_id = rl.eq_id AND
+		rl.repair_status = 'Completed'
+    GROUP BY e.eq_type;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT get_avg_repair_time();
