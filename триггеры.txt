@@ -1,0 +1,168 @@
+--Триггеры в SQL — это специальные хранимые процедуры, 
+--которые автоматически запускаются сервером при изменении данных 
+--(INSERT, UPDATE, DELETE) в таблицах. 
+--Они обеспечивают целостность данных, автоматизируют бизнес-логику и ведут аудит. 
+--Триггеры срабатывают до (BEFORE) или после (AFTER) события.
+
+--Типы триггеров:
+--1)по моменту срабатывания:
+--	а)before - срабатывает перед проверкой ограничений и выполнением операции
+--	б)after - срабатывает после завершения операции и проверки ограничений
+--	в)instead of - заменяет целевую операцию, применим только к представлениям
+--2)по области действия
+--	а)for each row - вызывается для каждой изменяемой строки, 
+--		в теле доступны переменные NEW и OLD
+--	б)for each statement - вызывается один раз для всей команды, 
+--		независимо от числа затронутых строк, new/old не определены, но можно использовать
+
+
+ПРИМЕРЫ ПРОВОДЯТСЯ НА БД game_store
+
+---------------- Пример 1 - Журнал изменения цен на игры ------------------------
+CREATE TABLE IF NOT EXISTS game_price_audit(
+	id SERIAL,
+	game_id INT NOT NULL,
+	old_price DECIMAL(12,2) not null,
+	new_price DECIMAL(12,2) NOT NULL,
+	changed_at TIMESTAMP NOT NULL DEFAULT now(),
+	changed_by TEXT NOT NULL DEFAULT CURRENT_USER,
+
+	CONSTRAINT pk_game_audit_id PRIMARY KEY(id)
+);
+
+CREATE OR REPLACE FUNCTION trg_audit_game()
+RETURNS TRIGGER AS $$
+BEGIN
+	IF NEW.price IS NOT NULL AND NEW.price < 0 THEN
+		RAISE EXCEPTION 'Цена игры не может быть отрицательной';
+	END IF;
+
+	IF NEW.price DISTINCT FROM OLD.price THEN
+		INSERT INTO game_price_audit(game_id, old_price, new_price)
+		VALUES (NEW.game_id, OLD.price, NEW.price);
+	END IF;
+
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER audit_game
+BEFORE UPDATE OF price ON game
+FOR EACH ROW EXECUTE FUNCTION trg_audit_game();
+
+--------- Пример 2 - автозаполнение цены покупки и запрет повторных покупок ---------
+CREATE OR REPLACE FUNCTION trg_check_purchase()
+RETURNS TRIGGER AS $$
+BEGIN
+	IF NEW.purchase_price IS NULL OR NEW.purchase_price < 0 THEN
+		SELECT price INTO NEW.purchase_price
+		FROM game
+		WHERE game_id = NEW.game_id;
+	END IF;
+
+	IF EXISTS(
+		SELECT 1
+		FROM purchase
+		WHERE player_id = NEW.player_id AND game_id = NEW.game_id
+	) THEN
+		RAISE EXCEPTION 'Игра уже куплена другим игроком';
+	END IF;
+
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER check_purchase
+BEFORE INSERT ON purchase
+FOR EACH ROW EXECUTE FUNCTION trg_check_purchase();
+
+SELECT * FROM purchase
+
+INSERT INTO purchase(player_id, game_id, purchase_price)
+VALUES (1, 25, null);
+
+---------- Пример 3 - ведение статистики игрока в реальном времени -------------
+CREATE TABLE IF NOT EXISTS player_stats(
+	player_id INT,
+	total_spent DECIMAL(12,2) NOT NULL DEFAULT 0,
+	games_count INT NOT NULL DEFAULT 0,
+
+	CONSTRAINT pk_player_stat_id PRIMARY KEY(player_id),
+	CONSTRAINT fk_player_stat_id FOREIGN KEY(player_id)
+		REFERENCES player(player_id)
+		ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE OR REPLACE FUNCTION trg_player_purchase_stats()
+RETURNS TRIGGER AS $$
+BEGIN
+	--TG_OP - Trigger Operation - операция на которую сработал триггер
+	IF TG_OP = 'INSERT' THEN
+		INSERT INTO player_stats
+		VALUES(NEW.player_id, NEW.purchase_price, 1)
+		ON CONFLICT(player_id) DO UPDATE
+		SET total_spent = player_stats.total_spent + NEW.purchase_price
+			games_count = player_stats.games_count + 1;
+	ELSIF TG_OP = 'DELETE' THEN
+		UPDATE player_stats
+		SET total_spent = total_spent - OLD.purchase_price
+			games_count = games_count - 1
+		WHERE player_id = OLD.player_id;
+	END IF;
+
+	RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER update_player_stats
+AFTER INSERT OR DELETE ON purchase
+FOR EACH ROW EXECUTE FUNCTION trg_player_purchase_stats();
+
+
+-------- Пример 4 - автообновление рейтинга популярности жанров -------------
+CREATE OR REPLACE FUNCTION trg_update_genre_popularity()
+RETURNS TRIGGER AS $$
+BEGIN
+	WITH genres_affected AS (
+		SELECT DISTINCT g.genre_id
+		FROM new_purchases AS np
+		JOIN game AS g
+			ON np.game_id = g.game_id
+	),
+	new_rating AS(
+		SELECT g.genre_id,
+			   -- ВСТАВИТЬ РЕАЛЬНУЮ ФОРМУЛА РАСЧЁТА РЕЙТИНГА
+			   COUNT(*) AS rating
+		FROM genre AS g
+		LEFT JOIN game AS gm
+			ON g.genre_id = gm.genre_id
+		LEFT JOIN purchases AS p
+			ON p.game_id = gm.game_id AND 
+			p.purchase_date BETWEEN CURRENT_DATE - INTERVAL '30 days' AND CURRENT_DATE
+		WHERE g.genre_id IN (SELECT * FROM genres_affected)
+		GROUP BY g.genre_id
+	)
+	UPDATE genre
+	SET popularity_rating = COALESCE(nr.rating, 0) 
+	FROM new_ratings AS nr
+	WHERE genre.genre_id = nr.genre_id;
+
+	RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE TRIGGER update_genre_popularity
+AFTER INSERT ON purchase
+REFERENCING NEW TABLE AS new_purchases
+FOR STATEMENT EXECUTE FUNCTION trg_update_genre_popularity();
+
+SELECT * FROM genre; -- ЧТОБ ПОСМОТРЕТЬ РЕЙТИНГИ
+SELECT * FROM game; -- ЧТОБ ПОСМОТРЕТЬ ЖАНРЫ
+
+INSERT INTO purchase(player_id, game_id, purchase_price, purchase_date)
+VALUES	(9,26,2500, '05.05.2026'),
+		(9,24,2500, '05.04.2026'),
+		(9,9,2500, '04.05.2026'),
+		(9,18,299, '04.04.2026'),
+		(9,15,1500, '04.05.2026')
